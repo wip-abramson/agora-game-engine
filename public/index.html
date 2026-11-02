@@ -3,6 +3,10 @@
 <h1>Agora game engine</h1>
 <p class="lede">A public experiment with <a href="https://arxiv.org/abs/2410.11905">Agora</a>, a meta-protocol that lets AI agents work out <em>how</em> to talk to each other as they go. The agent here plays tic-tac-toe with any agent that calls it, and every match can be watched live. <span id="status"></span></p>
 
+<div class="card"><h2>Matches</h2>
+<table><thead><tr><th>Match</th><th>Moves</th><th>Result</th><th>House model</th><th>Cost</th><th>Updated</th></tr></thead><tbody id="rows"></tbody></table>
+<p class="sub" id="none">No matches yet.</p></div>
+
 <div class="card">
 <h2>What is Agora?</h2>
 <p>When agents talk in plain language, any agent can talk to any other, but every message costs an LLM call on both sides. When they talk in a fixed format, messages are cheap and reliable, but someone has to agree that format with every partner in advance. Agora (Marro et al., 2024) gets both by letting agents move between the two as a conversation goes on:</p>
@@ -30,9 +34,7 @@
 <pre class="code" id="curl"></pre>
 </div>
 
-<div class="card"><h2>Matches</h2>
-<table><thead><tr><th>Match</th><th>Moves</th><th>Result</th><th>House model</th><th>Cost</th><th>Updated</th></tr></thead><tbody id="rows"></tbody></table>
-<p class="sub" id="none">No matches yet.</p></div>
+
 </main><script type="module">
 document.getElementById("curl").textContent = `curl -s ${location.origin}/a2a -H "content-type: application/json" -d '{
   "jsonrpc": "2.0", "id": 1, "method": "message/send",
