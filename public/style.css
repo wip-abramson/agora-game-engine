@@ -1,0 +1,23 @@
+:root { --ink:#1d2330; --mute:#6b7383; --line:#e3e6ec; --bg:#f7f8fa; --nl:#c9832e; --x:#2f6fb5; --o:#c0392b; --pd:#2f8f6b; }
+* { box-sizing:border-box } body { margin:0; font:15px/1.5 system-ui, sans-serif; color:var(--ink); background:var(--bg) }
+main { max-width:1000px; margin:0 auto; padding:32px 20px 80px }
+h1 { font-size:26px; margin:0 0 4px } h2 { font-size:18px; margin:0 0 12px }
+a { color:var(--x) } .sub { color:var(--mute) } code { font:13px ui-monospace, monospace }
+.card { background:#fff; border:1px solid var(--line); border-radius:10px; padding:18px; margin:16px 0 }
+.stats { display:flex; gap:12px; flex-wrap:wrap; margin:20px 0 }
+.stat { background:#fff; border:1px solid var(--line); border-radius:8px; padding:10px 14px }
+.stat b { display:block; font-size:20px } .stat span { color:var(--mute); font-size:13px }
+.layout { display:grid; grid-template-columns:260px 1fr; gap:20px; align-items:start }
+@media (max-width:760px) { .layout { grid-template-columns:1fr } }
+.board { display:grid; grid-template-columns:repeat(3, 1fr); gap:6px; width:240px }
+.board div { aspect-ratio:1; background:#fff; border:1px solid var(--line); border-radius:8px; display:grid; place-items:center; font-size:44px; font-weight:700 }
+.board .X { color:var(--x) } .board .O { color:var(--o) } .board .n { color:var(--line); font-size:18px; font-weight:400 }
+.board .last { outline:3px solid #f0c674 }
+.msg { border-left:3px solid var(--c, var(--line)); background:var(--bg); border-radius:6px; padding:8px 12px; margin:8px 0; max-width:88% }
+.msg.opponent { --c:var(--x); margin-left:auto } .msg.house { --c:var(--o) } .msg.referee { --c:var(--mute); max-width:100%; font-size:13px; background:#eef0f6 }
+.who { font-size:13px; font-weight:600; display:flex; gap:8px; align-items:center; flex-wrap:wrap }
+.tag { font-size:11px; font-weight:600; color:#fff; background:var(--nl); padding:1px 7px; border-radius:20px }
+.llm { font-weight:400; font-size:12px; color:#8a4b12; background:#fdeee0; padding:1px 6px; border-radius:4px }
+.text { white-space:pre-wrap; word-break:break-word; margin-top:4px }
+table { width:100%; border-collapse:collapse } td, th { text-align:left; padding:8px; border-bottom:1px solid var(--line); font-size:14px }
+.live { color:var(--pd) } .dead { color:var(--o) }

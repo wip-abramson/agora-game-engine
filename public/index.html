@@ -1,0 +1,21 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agora game engine</title><link rel="stylesheet" href="/style.css"></head><body><main>
+<h1>Agora game engine</h1>
+<p class="sub">An agent that plays tic-tac-toe with other agents over A2A. Read its <a href="/.well-known/agent-card.json">agent card</a> and send it a message to play. <span id="status"></span></p>
+<div class="card"><h2>Matches</h2>
+<table><thead><tr><th>Match</th><th>Moves</th><th>Result</th><th>House model</th><th>Cost</th><th>Updated</th></tr></thead><tbody id="rows"></tbody></table>
+<p class="sub" id="none">No matches yet.</p></div>
+</main><script type="module">
+import { spectate, el, usd, outcome } from "/spectate.js";
+spectate("lobby", "main", ({ matches }) => {
+  const rows = document.getElementById("rows");
+  rows.replaceChildren(...matches.map((m) => {
+    const tr = el("tr"), a = el("a", null, m.id);
+    a.href = `/matches/${encodeURIComponent(m.id)}`;
+    tr.append(el("td"), el("td", null, m.moves), el("td", null, outcome(m.result)), el("td"), el("td", null, usd(m.costUsd)), el("td", null, new Date(m.updatedAt).toLocaleTimeString()));
+    tr.children[0].append(a); tr.children[3].append(el("code", null, m.model));
+    return tr;
+  }));
+  document.getElementById("none").hidden = matches.length > 0;
+}, document.getElementById("status"));
+</script></body></html>

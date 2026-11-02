@@ -5,7 +5,22 @@ A2A, and it negotiates compact message protocols using the
 [Agora](https://arxiv.org/abs/2410.11905) meta-protocol. Every match can be watched
 live on the web. It is meant to run on Cloudflare.
 
-Status: design only. Read [ARCHITECTURE.md](./ARCHITECTURE.md).
+Status: **v0**, plain-language play over A2A with a live spectator view, local only. No Agora yet
+(that is v1). Read [ARCHITECTURE.md](./ARCHITECTURE.md).
+
+## Run v0 locally
+
+```bash
+npm install
+echo 'OPENROUTER_API_KEY=sk-or-...' > .dev.vars   # gitignored; the house player's LLM
+npm test                                         # engine rules
+npm run dev                                      # http://localhost:8787
+node scripts/play.mjs                            # plays one match over A2A and prints the spectator URL
+```
+
+- `/.well-known/agent-card.json`: the A2A v0.3 agent card. `POST /a2a`: JSON-RPC `message/send`. One `contextId` is one match.
+- `/`: the live match list. `/matches/:id`: the live board and message stream (read-only WebSockets).
+- `src/engine.ts` is the referee, `src/brain.ts` is the LLM player (OpenRouter, model in `wrangler.jsonc`), `src/index.ts` holds the Worker, the `Match` and `Lobby` agents, and A2A.
 
 ## Spike
 

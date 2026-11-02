@@ -1,0 +1,39 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Match · Agora game engine</title><link rel="stylesheet" href="/style.css"></head><body><main>
+<p><a href="/">← all matches</a></p>
+<h1>Match <code id="id"></code></h1>
+<p class="sub">Opponent (A2A caller) plays <b>X</b> · house agent plays <b>O</b> on <code id="model"></code> · <span id="status"></span></p>
+<div class="stats">
+  <div class="stat"><b id="result">–</b><span>result</span></div>
+  <div class="stat"><b id="moves">0</b><span>moves</span></div>
+  <div class="stat"><b id="tokens">0</b><span>LLM tokens</span></div>
+  <div class="stat"><b id="cost">$0.0000</b><span>cost so far</span></div>
+</div>
+<div class="layout">
+  <div class="card"><h2>Board</h2><div class="board" id="board"></div></div>
+  <div class="card"><h2>Messages</h2><div id="log"><p class="sub">Waiting for the first message.</p></div></div>
+</div>
+</main><script type="module">
+import { spectate, el, usd, outcome } from "/spectate.js";
+const id = decodeURIComponent(location.pathname.split("/").pop());
+document.getElementById("id").textContent = id;
+const $ = (x) => document.getElementById(x);
+spectate("match", id, (s) => {
+  $("board").replaceChildren(...s.board.map((c, i) => el("div", (c || "n") + (s.lastCell === i + 1 ? " last" : ""), c || i + 1)));
+  $("model").textContent = s.model || "–";
+  $("result").textContent = s.log.length ? outcome(s.result) : "–";
+  $("moves").textContent = s.board.filter(Boolean).length;
+  $("tokens").textContent = s.log.reduce((n, e) => n + (e.llm?.tokens || 0), 0);
+  $("cost").textContent = usd(s.costUsd);
+  if (!s.log.length) return;
+  $("log").replaceChildren(...s.log.map((e) => {
+    const box = el("div", `msg ${e.from}`), who = el("div", "who");
+    who.append(el("span", null, { opponent: "Opponent (X)", house: "House (O)", referee: "Referee" }[e.from]), el("span", "tag", e.kind));
+    if (e.from === "house") who.append(el("span", "sub", `cell ${e.cell}`));
+    if (e.llm) who.append(el("span", "llm", `LLM · ${e.llm.tokens} tok · ${usd(e.llm.costUsd)}`));
+    who.append(el("span", "sub", new Date(e.at).toLocaleTimeString()));
+    box.append(who, el("div", "text", e.text));
+    return box;
+  }));
+}, $("status"));
+</script></body></html>

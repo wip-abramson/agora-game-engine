@@ -1,0 +1,15 @@
+{
+  "name": "agora-game-engine",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": { "directory": "public", "binding": "ASSETS" },
+  "vars": { "MODEL": "qwen/qwen3-235b-a22b-2507" },
+  "durable_objects": {
+    "bindings": [
+      { "name": "Match", "class_name": "Match" },
+      { "name": "Lobby", "class_name": "Lobby" }
+    ]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Match", "Lobby"] }]
+}
