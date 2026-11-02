@@ -1,0 +1,465 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+<title>Agora run — negotiation and execution</title>
+<style>
+:root { --ink:#1d2330; --mute:#6b7383; --line:#e3e6ec; --bg:#f7f8fa;
+  --nl:#c9832e; --neg:#7a5cc4; --pd:#2f8f6b; }
+* { box-sizing:border-box } body { margin:0; font:15px/1.5 system-ui, sans-serif; color:var(--ink); background:var(--bg) }
+main { max-width:1000px; margin:0 auto; padding:32px 20px 80px }
+h1 { font-size:26px; margin:0 0 4px } h2 { font-size:18px; margin:0 0 12px } h4 { margin:0 0 6px; font-size:14px }
+small, .sub { color:var(--mute); font-weight:400 }
+.stats { display:flex; gap:12px; flex-wrap:wrap; margin:20px 0 }
+.stat { background:#fff; border:1px solid var(--line); border-radius:8px; padding:10px 14px }
+.stat b { display:block; font-size:20px } .stat span { color:var(--mute); font-size:13px }
+.card, .call { background:#fff; border:1px solid var(--line); border-radius:10px; padding:18px; margin:16px 0 }
+.chart { display:flex; gap:10px; align-items:flex-end; height:180px; padding-top:10px }
+.bar { flex:1; display:flex; flex-direction:column; align-items:center; text-decoration:none; color:var(--ink); height:100% }
+.stack { flex:1; width:100%; display:flex; flex-direction:column; justify-content:flex-end; background:var(--bg); border-radius:4px; overflow:hidden }
+.stack i { display:block } .stack i.s { opacity:.55 }
+.nl { --c:var(--nl) } .neg { --c:var(--neg) } .pd { --c:var(--pd) }
+.stack i { background:var(--c) }
+.bar b { font-size:12px; margin-top:4px } .bar em { font-size:12px; color:var(--mute); font-style:normal }
+.legend { font-size:13px; color:var(--mute); margin-top:10px } .legend i { display:inline-block; width:10px; height:10px; border-radius:2px; background:var(--c); margin:0 4px 0 12px }
+.tag { font-size:12px; font-weight:600; color:#fff; background:var(--c); padding:2px 8px; border-radius:20px; white-space:nowrap }
+.call header { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:12px }
+.call .n { font-weight:700 } .task { color:var(--mute) } .secs { color:var(--mute); font-size:13px; margin-left:auto }
+.res { font-family:ui-monospace, monospace; font-size:13px } .ok { color:var(--pd) } .bad { color:#c0392b }
+.msg { border-left:3px solid var(--c); background:var(--bg); border-radius:6px; padding:10px 12px; margin:8px 0; max-width:88% }
+.msg.in { margin-left:auto }
+.who { font-size:13px; font-weight:600; display:flex; gap:8px; align-items:center; flex-wrap:wrap }
+.by { font-weight:400; font-size:12px; padding:1px 6px; border-radius:4px } .llm { background:#fdeee0; color:#8a4b12 } .routine { background:#e0f3ea; color:#1d6b4c }
+pre { white-space:pre-wrap; word-break:break-word; font:13px/1.45 ui-monospace, monospace; margin:6px 0 0 }
+details summary { cursor:pointer; font-size:12px; color:var(--mute); margin-top:6px }
+.doc { background:#fbfaf6; border:1px solid var(--line); border-radius:6px; padding:14px }
+.code { background:#1d2330; color:#e6e9ef; border-radius:6px; padding:12px; max-height:420px; overflow:auto }
+.routines { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:16px }
+@media (max-width:760px) { .routines { grid-template-columns:1fr } }
+.hash { font-size:13px; color:var(--mute) }
+.event { font-size:13px; background:#eef0f6; border-radius:6px; padding:6px 10px; margin-top:8px }
+</style></head><body><main>
+<h1>Agora run: shop ↔ courier</h1>
+<p class="sub">Shop (sender) on <code>qwen/qwen3-235b-a22b-2507</code> · courier (receiver) on <code>deepseek/deepseek-v4-flash</code> · agora-protocol SDK, run locally</p>
+<div class="stats">
+  <div class="stat"><b>8</b><span>calls</span></div>
+  <div class="stat"><b>4</b><span>calls with no LLM at all</span></div>
+  <div class="stat"><b>22,621</b><span>LLM tokens, total</span></div>
+  <div class="stat"><b>$0.0028</b><span>cost, OpenRouter list price</span></div>
+</div>
+<section class="card"><h2>LLM tokens per call <small>(darker: courier · lighter: shop)</small></h2>
+<div class="chart"><a class="bar" href="#call-1" title="call 1: 4,611 tokens"><span class="stack"><i class="k nl" style="height:13.0%"></i><i class="s nl" style="height:31.2%"></i></span><b>4,611</b><em>1</em></a><a class="bar" href="#call-2" title="call 2: 4,583 tokens"><span class="stack"><i class="k nl" style="height:12.5%"></i><i class="s nl" style="height:31.3%"></i></span><b>4,583</b><em>2</em></a><a class="bar" href="#call-3" title="call 3: 10,452 tokens"><span class="stack"><i class="k neg" style="height:38.5%"></i><i class="s neg" style="height:61.5%"></i></span><b>10,452</b><em>3</em></a><a class="bar" href="#call-4" title="call 4: 2,975 tokens"><span class="stack"><i class="k pd" style="height:14.2%"></i><i class="s pd" style="height:14.3%"></i></span><b>2,975</b><em>4</em></a><a class="bar" href="#call-5" title="call 5: 0 tokens"><span class="stack"><i class="k pd" style="height:0.0%"></i><i class="s pd" style="height:0.0%"></i></span><b>0</b><em>5</em></a><a class="bar" href="#call-6" title="call 6: 0 tokens"><span class="stack"><i class="k pd" style="height:0.0%"></i><i class="s pd" style="height:0.0%"></i></span><b>0</b><em>6</em></a><a class="bar" href="#call-7" title="call 7: 0 tokens"><span class="stack"><i class="k pd" style="height:0.0%"></i><i class="s pd" style="height:0.0%"></i></span><b>0</b><em>7</em></a><a class="bar" href="#call-8" title="call 8: 0 tokens"><span class="stack"><i class="k pd" style="height:0.0%"></i><i class="s pd" style="height:0.0%"></i></span><b>0</b><em>8</em></a></div>
+<div class="legend"><i class="nl"></i>natural language<i class="neg"></i>negotiation<i class="pd"></i>protocol</div></section>
+
+<section class="card">
+  <h2>Protocol document</h2>
+  <p class="hash">ID <code>R76IEp+ovRD9v0P1LVO4bToqSEE=</code> · SHA1, base64 · recomputed from the text: <b>matches</b></p>
+  <pre class="doc">---
+name: CourierQuoteProtocol
+description: This protocol is for requesting a delivery quote from a courier service, providing pickup, drop-off, weight, and optionally a target URL, and receiving a price and ETA in response.
+multiround: false
+---
+
+**Protocol Description:**
+
+This is a single-message protocol where a client sends a JSON string containing delivery request parameters, and the service responds with a JSON string containing the quote information.
+
+**Request Format:**
+
+A JSON string with the following structure:
+```json
+{
+  &quot;pickup&quot;: &quot;string&quot;,
+  &quot;dropoff&quot;: &quot;string&quot;,
+  &quot;weight_kg&quot;: &quot;number&quot;,
+  &quot;target&quot;: &quot;string (optional)&quot;
+}
+```
+
+- `pickup`: The pickup address (string, required)
+- `dropoff`: The drop-off address (string, required)
+- `weight_kg`: The parcel weight in kilograms (number, required)
+- `target`: Optional URL of the target system (string, optional, may be ignored)
+
+**Response Format:**
+
+A JSON string with the following structure:
+```json
+{
+  &quot;price_gbp&quot;: &quot;number&quot;,
+  &quot;eta_minutes&quot;: &quot;integer&quot;
+}
+```
+
+- `price_gbp`: The price in British Pounds (float)
+- `eta_minutes`: Estimated time of arrival in minutes (integer)
+
+**Usage:**
+
+- The sender serializes the request object to a JSON string and sends it.
+- The receiver parses the JSON string, processes the request, and returns a JSON string response.
+- Only one message is sent and one received.</pre>
+  <div class="routines"><div class="routine"><h4>shop's routine <small>written by qwen/qwen3-235b-a22b-2507</small></h4><pre class="code">import json
+
+def run(task_data):
+    &quot;&quot;&quot;
+    Send a delivery quote request to the courier service and return the quote.
+    
+    Args:
+        task_data: Dictionary containing pickup, dropoff, weight_kg, and optional target
+        
+    Returns:
+        Dictionary with price_gbp (float) and eta_minutes (int)
+    &quot;&quot;&quot;
+    # Prepare the request payload
+    request_payload = {
+        &quot;pickup&quot;: task_data[&quot;pickup&quot;],
+        &quot;dropoff&quot;: task_data[&quot;dropoff&quot;],
+        &quot;weight_kg&quot;: task_data[&quot;weight_kg&quot;]
+    }
+    
+    # Add target if provided
+    if &quot;target&quot; in task_data:
+        request_payload[&quot;target&quot;] = task_data[&quot;target&quot;]
+    
+    # Convert to JSON string
+    request_json = json.dumps(request_payload)
+    
+    # Send to server and get response
+    response_json = send_to_server(request_json)
+    
+    # Parse the response
+    try:
+        response_data = json.loads(response_json)
+        return response_data
+    except json.JSONDecodeError as e:
+        raise Exception(f&quot;Failed to parse server response as JSON: {response_json}&quot;) from e</pre></div><div class="routine"><h4>courier's routine <small>written by deepseek/deepseek-v4-flash</small></h4><pre class="code">import json
+
+def run(query):
+    try:
+        data = json.loads(query)
+    except json.JSONDecodeError as e:
+        raise ValueError(f&quot;Invalid JSON: {e}&quot;)
+    if not isinstance(data, dict):
+        raise ValueError(&quot;Request must be a JSON object&quot;)
+    # check required fields
+    for field in [&#x27;pickup&#x27;, &#x27;dropoff&#x27;, &#x27;weight_kg&#x27;]:
+        if field not in data:
+            raise ValueError(f&quot;Missing required field: {field}&quot;)
+    pickup = data[&#x27;pickup&#x27;]
+    dropoff = data[&#x27;dropoff&#x27;]
+    weight_kg = data[&#x27;weight_kg&#x27;]
+    if not isinstance(pickup, str) or not isinstance(dropoff, str):
+        raise ValueError(&quot;pickup and dropoff must be strings&quot;)
+    if not isinstance(weight_kg, (int, float)):
+        raise ValueError(&quot;weight_kg must be a number&quot;)
+    # optional target ignored
+    result = quote_delivery(pickup, dropoff, weight_kg)
+    return json.dumps(result)</pre></div></div>
+</section>
+<h2 style="margin-top:28px">Timeline</h2>
+
+<section class="call" id="call-1">
+  <header><span class="n">Call 1</span><span class="tag nl">Natural language</span>
+    <span class="task">1 High St, London → 22 Park Rd, London, 1 kg</span>
+    <span class="res ok">{&quot;price_gbp&quot;: 5.7, &quot;eta_minutes&quot;: 35} ✓</span>
+    <span class="secs">18.3s · $0.00049</span></header>
+  
+  <div class="msg out nl"><div class="who">shop → courier <span class="tag nl">Natural language</span> <span class="by llm">shop: LLM · 928 in / 48 out</span></div>
+    <pre>{
+  &quot;pickup&quot;: &quot;1 High St, London&quot;,
+  &quot;dropoff&quot;: &quot;22 Park Rd, London&quot;,
+  &quot;weight_kg&quot;: 1
+}</pre>
+    <details><summary>Agora envelope</summary><pre>{
+  &quot;protocolHash&quot;: null,
+  &quot;protocolSources&quot;: [],
+  &quot;body&quot;: &quot;{\&quot;pickup\&quot;: \&quot;1 High St, London\&quot;, \&quot;dropoff\&quot;: \&quot;22 Park Rd, London\&quot;, \&quot;weight_kg\&quot;: 1}&quot;,
+  &quot;multiround&quot;: true
+}</pre></details></div>
+  <div class="msg in nl"><div class="who">courier → shop <span class="by llm">courier: LLM · 1,126 in / 229 out</span> <span class="secs">8.75s</span></div>
+    <pre>Here&#x27;s the quote for your delivery:Here&#x27;s the quote for your delivery:Here&#x27;s the quote for your delivery:Here&#x27;s your delivery quote:
+
+- **Pickup:** 1 High St, London
+- **Drop-off:** 22 Park Rd, London
+- **Weight:** 1 kg
+- **Price:** £5.70
+- **Estimated delivery time:** 35 minutes
+
+Would you like to proceed with booking this delivery?</pre>
+    <details><summary>Agora envelope</summary><pre>{
+  &quot;body&quot;: &quot;Here&#x27;s the quote for your delivery:Here&#x27;s the quote for your delivery:Here&#x27;s the quote for your delivery:Here&#x27;s your delivery quote:\n\n- **Pickup:** 1 High St, London\n- **Drop-off:** 22 Park Rd, London\n- **Weight:** 1 kg\n- **Price:** \u00a35.70\n- **Estimated delivery time:** 35 minutes\n\nWould you like to proceed with booking this delivery?&quot;,
+  &quot;conversationId&quot;: &quot;02edb3cb-198a-4170-ae2f-a1645f7d9c10&quot;,
+  &quot;status&quot;: &quot;success&quot;
+}</pre></details></div>
+  
+</section>
+<section class="call" id="call-2">
+  <header><span class="n">Call 2</span><span class="tag nl">Natural language</span>
+    <span class="task">1 High St, London → 22 Park Rd, London, 2.5 kg</span>
+    <span class="res ok">{&quot;price_gbp&quot;: 7.5, &quot;eta_minutes&quot;: 35} ✓</span>
+    <span class="secs">7.9s · $0.00048</span></header>
+  
+  <div class="msg out nl"><div class="who">shop → courier <span class="tag nl">Natural language</span> <span class="by llm">shop: LLM · 930 in / 52 out</span></div>
+    <pre>REQUEST:ESTIMATE|PICKUP:1 High St, London|DROPOFF:22 Park Rd, London|WEIGHT:2.5</pre>
+    <details><summary>Agora envelope</summary><pre>{
+  &quot;protocolHash&quot;: null,
+  &quot;protocolSources&quot;: [],
+  &quot;body&quot;: &quot;REQUEST:ESTIMATE|PICKUP:1 High St, London|DROPOFF:22 Park Rd, London|WEIGHT:2.5&quot;,
+  &quot;multiround&quot;: true
+}</pre></details></div>
+  <div class="msg in nl"><div class="who">courier → shop <span class="by llm">courier: LLM · 1,134 in / 174 out</span> <span class="secs">1.1s</span></div>
+    <pre>
+
+Let me process that request for you.
+
+Let me process that request for you.
+
+Let me process that request for you.Here&#x27;s your delivery estimate:
+
+📦 **Parcel Weight:** 2.5 kg  
+📍 **From:** 1 High St, London  
+📍 **To:** 22 Park Rd, London  
+💰 **Price:** £7.50  
+⏱ **Estimated Delivery Time:** 35 minutes  
+
+Would you like to go ahead and book this delivery?</pre>
+    <details><summary>Agora envelope</summary><pre>{
+  &quot;body&quot;: &quot;\n\nLet me process that request for you.\n\nLet me process that request for you.\n\nLet me process that request for you.Here&#x27;s your delivery estimate:\n\n\ud83d\udce6 **Parcel Weight:** 2.5 kg  \n\ud83d\udccd **From:** 1 High St, London  \n\ud83d\udccd **To:** 22 Park Rd, London  \n\ud83d\udcb0 **Price:** \u00a37.50  \n\u23f1 **Estimated Delivery Time:** 35 minutes  \n\nWould you like to go ahead and book this delivery?&quot;,
+  &quot;conversationId&quot;: &quot;e5543608-8519-461b-81ff-bb44cd93b368&quot;,
+  &quot;status&quot;: &quot;success&quot;
+}</pre></details></div>
+  
+</section>
+<section class="call" id="call-3">
+  <header><span class="n">Call 3</span><span class="tag neg">Negotiation</span>
+    <span class="task">1 High St, London → 22 Park Rd, London, 4 kg</span>
+    <span class="res ok">{&quot;price_gbp&quot;: 9.3, &quot;eta_minutes&quot;: 35} ✓</span>
+    <span class="secs">47.1s · $0.00127</span></header>
+  
+  <div class="msg out neg"><div class="who">shop → courier <span class="tag neg">Negotiation</span> <span class="by llm">shop: LLM · 739 in / 174 out</span></div>
+    <pre>Hello! I&#x27;m here to negotiate a protocol for querying a service that provides delivery quotes from a courier. The service needs to receive pickup and drop-off addresses, parcel weight, and optionally a target URL, and it should return the price in GBP and estimated time of arrival in minutes.
+
+Since the implementation will receive a string and return a string, we need to define a clear format for the request and response. Let&#x27;s agree on a simple JSON-based protocol.
+
+I propose the following:
+
+- The **request** is a JSON string containing the fields `pickup`, `dropoff`, and `weight_kg` (all required), and optionally `target`.
+- The **response** is a JSON string containing `price_gbp` (float) and `eta_minutes` (integer).
+
+Are you okay with this format? If so, I can finalize the protocol.</pre>
+    <details><summary>Agora envelope</summary><pre>{
+  &quot;protocolHash&quot;: &quot;negotiation&quot;,
+  &quot;protocolSources&quot;: null,
+  &quot;body&quot;: &quot;Hello! I&#x27;m here to negotiate a protocol for querying a service that provides delivery quotes from a courier. The service needs to receive pickup and drop-off addresses, parcel weight, and optionally a target URL, and it should return the price in GBP and estimated time of arrival in minutes.\n\nSince the implementation will receive a string and return a string, we need to define a clear format for the request and response. Let&#x27;s agree on a simple JSON-based protocol.\n\nI propose the following:\n\n- The **request** is a JSON string containing the fields `pickup`, `dropoff`, and `weight_kg` (all required), and optionally `target`.\n- The **response** is a JSON string containing `price_gbp` (float) and `eta_minutes` (integer).\n\nAre you okay with this format? If so, I can finalize the protocol.&quot;,
+  &quot;multiround&quot;: true
+}</pre></details></div>
+  <div class="msg in neg"><div class="who">courier → shop <span class="by llm">courier: LLM · 1,124 in / 228 out</span> <span class="secs">3.59s</span></div>
+    <pre>
+
+I&#x27;m happy with that proposal! A simple JSON-based protocol works well. Let me confirm the details:
+
+**Request format (JSON string):**
+```json
+{
+  &quot;pickup&quot;: &quot;string (pickup address)&quot;,
+  &quot;dropoff&quot;: &quot;string (drop-off address)&quot;,
+  &quot;weight_kg&quot;: &quot;number (parcel weight in kg)&quot;,
+  &quot;target&quot;: &quot;string (optional, target URL)&quot;
+}
+```
+
+**Response format (JSON string):**
+```json
+{
+  &quot;price_gbp&quot;: &quot;float&quot;,
+  &quot;eta_minutes&quot;: &quot;integer&quot;
+}
+```
+
+I&#x27;m good with that. The implementer will:
+1. Parse the incoming JSON request
+2. Extract `pickup`, `dropoff`, `weight_kg`
+3. Call `quote_delivery(pickup, dropoff, weight_kg)`
+4. Return the result as a JSON string with `price_gbp` and `eta_minutes`
+
+The optional `target` field can be ignored since we have no need for it with the available tools.
+
+I&#x27;m done - let&#x27;s go with this protocol!</pre>
+    <details><summary>Agora envelope</summary><pre>{
+  &quot;body&quot;: &quot;\n\nI&#x27;m happy with that proposal! A simple JSON-based protocol works well. Let me confirm the details:\n\n**Request format (JSON string):**\n```json\n{\n  \&quot;pickup\&quot;: \&quot;string (pickup address)\&quot;,\n  \&quot;dropoff\&quot;: \&quot;string (drop-off address)\&quot;,\n  \&quot;weight_kg\&quot;: \&quot;number (parcel weight in kg)\&quot;,\n  \&quot;target\&quot;: \&quot;string (optional, target URL)\&quot;\n}\n```\n\n**Response format (JSON string):**\n```json\n{\n  \&quot;price_gbp\&quot;: \&quot;float\&quot;,\n  \&quot;eta_minutes\&quot;: \&quot;integer\&quot;\n}\n```\n\nI&#x27;m good with that. The implementer will:\n1. Parse the incoming JSON request\n2. Extract `pickup`, `dropoff`, `weight_kg`\n3. Call `quote_delivery(pickup, dropoff, weight_kg)`\n4. Return the result as a JSON string with `price_gbp` and `eta_minutes`\n\nThe optional `target` field can be ignored since we have no need for it with the available tools.\n\nI&#x27;m done - let&#x27;s go with this protocol!&quot;,
+  &quot;conversationId&quot;: &quot;320bb857-4be7-4909-abae-065bdbbfe6a7&quot;,
+  &quot;status&quot;: &quot;success&quot;
+}</pre></details></div>
+  <div class="msg out pd"><div class="who">shop → courier <span class="tag pd">Protocol</span> <span class="by llm">shop: LLM · 2,389 in / 376 out</span></div>
+    <pre>{
+  &quot;pickup&quot;: &quot;1 High St, London&quot;,
+  &quot;dropoff&quot;: &quot;22 Park Rd, London&quot;,
+  &quot;weight_kg&quot;: 4
+}</pre>
+    <details><summary>Agora envelope</summary><pre>{
+  &quot;protocolHash&quot;: &quot;R76IEp+ovRD9v0P1LVO4bToqSEE=&quot;,
+  &quot;protocolSources&quot;: [
+    &quot;data:text/plain;charset=utf-8,---%0Aname%3A%20CourierQuoteProtocol%0Adescription%3A%20This%20protocol%20is%20for%20requesting%20a%20delivery%20quote%20from%20a%20courier%20service%2C%20providing%20pickup%2C%20drop-off%2C%20weight%2C%20and%20optionally%20a%20target%20URL%2C%20and%20receiving%20a%20price%20and%20ETA%20in%20response.%0Amultiround%3A%20false%0A---%0A%0A%2A%2AProtocol%20Description%3A%2A%2A%0A%0AThis%20is%20a%20single-message%20protocol%20where%20a%20client%20sends%20a%20JSON%20string%20containing%20delivery%20request%20parameters%2C%20and%20the%20service%20responds%20with%20a%20JSON%20string%20containing%20the%20quote%20information.%0A%0A%2A%2ARequest%20Format%3A%2A%2A%0A%0AA%20JSON%20string%20with%20the%20following%20structure%3A%0A%60%60%60json%0A%7B%0A%20%20%22pickup%22%3A%20%22string%22%2C%0A%20%20%22dropoff%22%3A%20%22string%22%2C%0A%20%20%22weight_kg%22%3A%20%22number%22%2C%0A%20%20%22target%22%3A%20%22string%20%28optional%29%22%0A%7D%0A%60%60%60%0A%0A-%20%60pickup%60%3A%20The%20pickup%20address%20%28string%2C%20required%29%0A-%20%60dropoff%60%3A%20The%20drop-off%20address%20%28string%2C%20required%29%0A-%20%60weight_kg%60%3A%20The%20parcel%20weight%20in%20kilograms%20%28number%2C%20required%29%0A-%20%60target%60%3A%20Optional%20URL%20of%20the%20target%20system%20%28string%2C%20optional%2C%20may%20be%20ignored%29%0A%0A%2A%2AResponse%20Format%3A%2A%2A%0A%0AA%20JSON%20string%20with%20the%20following%20structure%3A%0A%60%60%60json%0A%7B%0A%20%20%22price_gbp%22%3A%20%22number%22%2C%0A%20%20%22eta_minutes%22%3A%20%22integer%22%0A%7D%0A%60%60%60%0A%0A-%20%60price_gbp%60%3A%20The%20price%20in%20British%20Pounds%20%28float%29%0A-%20%60eta_minutes%60%3A%20Estimated%20time%20of%20arrival%20in%20minutes%20%28integer%29%0A%0A%2A%2AUsage%3A%2A%2A%0A%0A-%20The%20sender%20serializes%20the%20request%20object%20to%20a%20JSON%20string%20and%20sends%20it.%0A-%20The%20receiver%20parses%20the%20JSON%20string%2C%20processes%20the%20request%2C%20and%20returns%20a%20JSON%20string%20response.%0A-%20Only%20one%20message%20is%20sent%20and%20one%20received.&quot;
+  ],
+  &quot;body&quot;: &quot;{\&quot;pickup\&quot;: \&quot;1 High St, London\&quot;, \&quot;dropoff\&quot;: \&quot;22 Park Rd, London\&quot;, \&quot;weight_kg\&quot;: 4}&quot;
+}</pre></details></div>
+  <div class="msg in pd"><div class="who">courier → shop <span class="by llm">courier: LLM · 2,405 in / 263 out</span> <span class="secs">13.73s</span></div>
+    <pre>{
+  &quot;price_gbp&quot;: 9.3,
+  &quot;eta_minutes&quot;: 35
+}</pre>
+    <details><summary>Agora envelope</summary><pre>{
+  &quot;body&quot;: &quot;{\&quot;price_gbp\&quot;: 9.3, \&quot;eta_minutes\&quot;: 35}&quot;,
+  &quot;status&quot;: &quot;success&quot;
+}</pre></details></div>
+  <div class="event">shop stored protocol <code>R76IEp+ovR…</code></div><div class="event">courier stored protocol <code>R76IEp+ovR…</code></div>
+</section>
+<section class="call" id="call-4">
+  <header><span class="n">Call 4</span><span class="tag pd">Protocol</span>
+    <span class="task">1 High St, London → 22 Park Rd, London, 0.5 kg</span>
+    <span class="res ok">{&quot;price_gbp&quot;: 5.1, &quot;eta_minutes&quot;: 35} ✓</span>
+    <span class="secs">32.4s · $0.00055</span></header>
+  
+  <div class="msg out pd"><div class="who">shop → courier <span class="tag pd">Protocol</span> <span class="by llm">shop: LLM · 1,022 in / 471 out</span></div>
+    <pre>{
+  &quot;pickup&quot;: &quot;1 High St, London&quot;,
+  &quot;dropoff&quot;: &quot;22 Park Rd, London&quot;,
+  &quot;weight_kg&quot;: 0.5
+}</pre>
+    <details><summary>Agora envelope</summary><pre>{
+  &quot;protocolHash&quot;: &quot;R76IEp+ovRD9v0P1LVO4bToqSEE=&quot;,
+  &quot;protocolSources&quot;: [
+    &quot;data:text/plain;charset=utf-8,---%0Aname%3A%20CourierQuoteProtocol%0Adescription%3A%20This%20protocol%20is%20for%20requesting%20a%20delivery%20quote%20from%20a%20courier%20service%2C%20providing%20pickup%2C%20drop-off%2C%20weight%2C%20and%20optionally%20a%20target%20URL%2C%20and%20receiving%20a%20price%20and%20ETA%20in%20response.%0Amultiround%3A%20false%0A---%0A%0A%2A%2AProtocol%20Description%3A%2A%2A%0A%0AThis%20is%20a%20single-message%20protocol%20where%20a%20client%20sends%20a%20JSON%20string%20containing%20delivery%20request%20parameters%2C%20and%20the%20service%20responds%20with%20a%20JSON%20string%20containing%20the%20quote%20information.%0A%0A%2A%2ARequest%20Format%3A%2A%2A%0A%0AA%20JSON%20string%20with%20the%20following%20structure%3A%0A%60%60%60json%0A%7B%0A%20%20%22pickup%22%3A%20%22string%22%2C%0A%20%20%22dropoff%22%3A%20%22string%22%2C%0A%20%20%22weight_kg%22%3A%20%22number%22%2C%0A%20%20%22target%22%3A%20%22string%20%28optional%29%22%0A%7D%0A%60%60%60%0A%0A-%20%60pickup%60%3A%20The%20pickup%20address%20%28string%2C%20required%29%0A-%20%60dropoff%60%3A%20The%20drop-off%20address%20%28string%2C%20required%29%0A-%20%60weight_kg%60%3A%20The%20parcel%20weight%20in%20kilograms%20%28number%2C%20required%29%0A-%20%60target%60%3A%20Optional%20URL%20of%20the%20target%20system%20%28string%2C%20optional%2C%20may%20be%20ignored%29%0A%0A%2A%2AResponse%20Format%3A%2A%2A%0A%0AA%20JSON%20string%20with%20the%20following%20structure%3A%0A%60%60%60json%0A%7B%0A%20%20%22price_gbp%22%3A%20%22number%22%2C%0A%20%20%22eta_minutes%22%3A%20%22integer%22%0A%7D%0A%60%60%60%0A%0A-%20%60price_gbp%60%3A%20The%20price%20in%20British%20Pounds%20%28float%29%0A-%20%60eta_minutes%60%3A%20Estimated%20time%20of%20arrival%20in%20minutes%20%28integer%29%0A%0A%2A%2AUsage%3A%2A%2A%0A%0A-%20The%20sender%20serializes%20the%20request%20object%20to%20a%20JSON%20string%20and%20sends%20it.%0A-%20The%20receiver%20parses%20the%20JSON%20string%2C%20processes%20the%20request%2C%20and%20returns%20a%20JSON%20string%20response.%0A-%20Only%20one%20message%20is%20sent%20and%20one%20received.&quot;
+  ],
+  &quot;body&quot;: &quot;{\&quot;pickup\&quot;: \&quot;1 High St, London\&quot;, \&quot;dropoff\&quot;: \&quot;22 Park Rd, London\&quot;, \&quot;weight_kg\&quot;: 0.5}&quot;
+}</pre></details></div>
+  <div class="msg in pd"><div class="who">courier → shop <span class="by llm">courier: LLM · 744 in / 738 out</span> <span class="secs">7.41s</span></div>
+    <pre>{
+  &quot;price_gbp&quot;: 5.1,
+  &quot;eta_minutes&quot;: 35
+}</pre>
+    <details><summary>Agora envelope</summary><pre>{
+  &quot;body&quot;: &quot;{\&quot;price_gbp\&quot;: 5.1, \&quot;eta_minutes\&quot;: 35}&quot;,
+  &quot;status&quot;: &quot;success&quot;
+}</pre></details></div>
+  <div class="event">shop wrote a routine for protocol <code>R76IEp+ovR…</code></div><div class="event">courier wrote a routine for protocol <code>R76IEp+ovR…</code></div>
+</section>
+<section class="call" id="call-5">
+  <header><span class="n">Call 5</span><span class="tag pd">Protocol</span>
+    <span class="task">1 High St, London → 22 Park Rd, London, 3 kg</span>
+    <span class="res ok">{&quot;price_gbp&quot;: 8.1, &quot;eta_minutes&quot;: 35} ✓</span>
+    <span class="secs">0.0s · $0.00000</span></header>
+  
+  <div class="msg out pd"><div class="who">shop → courier <span class="tag pd">Protocol</span> <span class="by routine">shop: routine · 0 tokens</span></div>
+    <pre>{
+  &quot;pickup&quot;: &quot;1 High St, London&quot;,
+  &quot;dropoff&quot;: &quot;22 Park Rd, London&quot;,
+  &quot;weight_kg&quot;: 3
+}</pre>
+    <details><summary>Agora envelope</summary><pre>{
+  &quot;protocolHash&quot;: &quot;R76IEp+ovRD9v0P1LVO4bToqSEE=&quot;,
+  &quot;protocolSources&quot;: [
+    &quot;data:text/plain;charset=utf-8,---%0Aname%3A%20CourierQuoteProtocol%0Adescription%3A%20This%20protocol%20is%20for%20requesting%20a%20delivery%20quote%20from%20a%20courier%20service%2C%20providing%20pickup%2C%20drop-off%2C%20weight%2C%20and%20optionally%20a%20target%20URL%2C%20and%20receiving%20a%20price%20and%20ETA%20in%20response.%0Amultiround%3A%20false%0A---%0A%0A%2A%2AProtocol%20Description%3A%2A%2A%0A%0AThis%20is%20a%20single-message%20protocol%20where%20a%20client%20sends%20a%20JSON%20string%20containing%20delivery%20request%20parameters%2C%20and%20the%20service%20responds%20with%20a%20JSON%20string%20containing%20the%20quote%20information.%0A%0A%2A%2ARequest%20Format%3A%2A%2A%0A%0AA%20JSON%20string%20with%20the%20following%20structure%3A%0A%60%60%60json%0A%7B%0A%20%20%22pickup%22%3A%20%22string%22%2C%0A%20%20%22dropoff%22%3A%20%22string%22%2C%0A%20%20%22weight_kg%22%3A%20%22number%22%2C%0A%20%20%22target%22%3A%20%22string%20%28optional%29%22%0A%7D%0A%60%60%60%0A%0A-%20%60pickup%60%3A%20The%20pickup%20address%20%28string%2C%20required%29%0A-%20%60dropoff%60%3A%20The%20drop-off%20address%20%28string%2C%20required%29%0A-%20%60weight_kg%60%3A%20The%20parcel%20weight%20in%20kilograms%20%28number%2C%20required%29%0A-%20%60target%60%3A%20Optional%20URL%20of%20the%20target%20system%20%28string%2C%20optional%2C%20may%20be%20ignored%29%0A%0A%2A%2AResponse%20Format%3A%2A%2A%0A%0AA%20JSON%20string%20with%20the%20following%20structure%3A%0A%60%60%60json%0A%7B%0A%20%20%22price_gbp%22%3A%20%22number%22%2C%0A%20%20%22eta_minutes%22%3A%20%22integer%22%0A%7D%0A%60%60%60%0A%0A-%20%60price_gbp%60%3A%20The%20price%20in%20British%20Pounds%20%28float%29%0A-%20%60eta_minutes%60%3A%20Estimated%20time%20of%20arrival%20in%20minutes%20%28integer%29%0A%0A%2A%2AUsage%3A%2A%2A%0A%0A-%20The%20sender%20serializes%20the%20request%20object%20to%20a%20JSON%20string%20and%20sends%20it.%0A-%20The%20receiver%20parses%20the%20JSON%20string%2C%20processes%20the%20request%2C%20and%20returns%20a%20JSON%20string%20response.%0A-%20Only%20one%20message%20is%20sent%20and%20one%20received.&quot;
+  ],
+  &quot;body&quot;: &quot;{\&quot;pickup\&quot;: \&quot;1 High St, London\&quot;, \&quot;dropoff\&quot;: \&quot;22 Park Rd, London\&quot;, \&quot;weight_kg\&quot;: 3}&quot;
+}</pre></details></div>
+  <div class="msg in pd"><div class="who">courier → shop <span class="by routine">courier: routine · 0 tokens</span> <span class="secs">0.01s</span></div>
+    <pre>{
+  &quot;price_gbp&quot;: 8.1,
+  &quot;eta_minutes&quot;: 35
+}</pre>
+    <details><summary>Agora envelope</summary><pre>{
+  &quot;body&quot;: &quot;{\&quot;price_gbp\&quot;: 8.1, \&quot;eta_minutes\&quot;: 35}&quot;,
+  &quot;status&quot;: &quot;success&quot;
+}</pre></details></div>
+  
+</section>
+<section class="call" id="call-6">
+  <header><span class="n">Call 6</span><span class="tag pd">Protocol</span>
+    <span class="task">1 High St, London → 22 Park Rd, London, 6 kg</span>
+    <span class="res ok">{&quot;price_gbp&quot;: 11.7, &quot;eta_minutes&quot;: 35} ✓</span>
+    <span class="secs">0.0s · $0.00000</span></header>
+  
+  <div class="msg out pd"><div class="who">shop → courier <span class="tag pd">Protocol</span> <span class="by routine">shop: routine · 0 tokens</span></div>
+    <pre>{
+  &quot;pickup&quot;: &quot;1 High St, London&quot;,
+  &quot;dropoff&quot;: &quot;22 Park Rd, London&quot;,
+  &quot;weight_kg&quot;: 6
+}</pre>
+    <details><summary>Agora envelope</summary><pre>{
+  &quot;protocolHash&quot;: &quot;R76IEp+ovRD9v0P1LVO4bToqSEE=&quot;,
+  &quot;protocolSources&quot;: [
+    &quot;data:text/plain;charset=utf-8,---%0Aname%3A%20CourierQuoteProtocol%0Adescription%3A%20This%20protocol%20is%20for%20requesting%20a%20delivery%20quote%20from%20a%20courier%20service%2C%20providing%20pickup%2C%20drop-off%2C%20weight%2C%20and%20optionally%20a%20target%20URL%2C%20and%20receiving%20a%20price%20and%20ETA%20in%20response.%0Amultiround%3A%20false%0A---%0A%0A%2A%2AProtocol%20Description%3A%2A%2A%0A%0AThis%20is%20a%20single-message%20protocol%20where%20a%20client%20sends%20a%20JSON%20string%20containing%20delivery%20request%20parameters%2C%20and%20the%20service%20responds%20with%20a%20JSON%20string%20containing%20the%20quote%20information.%0A%0A%2A%2ARequest%20Format%3A%2A%2A%0A%0AA%20JSON%20string%20with%20the%20following%20structure%3A%0A%60%60%60json%0A%7B%0A%20%20%22pickup%22%3A%20%22string%22%2C%0A%20%20%22dropoff%22%3A%20%22string%22%2C%0A%20%20%22weight_kg%22%3A%20%22number%22%2C%0A%20%20%22target%22%3A%20%22string%20%28optional%29%22%0A%7D%0A%60%60%60%0A%0A-%20%60pickup%60%3A%20The%20pickup%20address%20%28string%2C%20required%29%0A-%20%60dropoff%60%3A%20The%20drop-off%20address%20%28string%2C%20required%29%0A-%20%60weight_kg%60%3A%20The%20parcel%20weight%20in%20kilograms%20%28number%2C%20required%29%0A-%20%60target%60%3A%20Optional%20URL%20of%20the%20target%20system%20%28string%2C%20optional%2C%20may%20be%20ignored%29%0A%0A%2A%2AResponse%20Format%3A%2A%2A%0A%0AA%20JSON%20string%20with%20the%20following%20structure%3A%0A%60%60%60json%0A%7B%0A%20%20%22price_gbp%22%3A%20%22number%22%2C%0A%20%20%22eta_minutes%22%3A%20%22integer%22%0A%7D%0A%60%60%60%0A%0A-%20%60price_gbp%60%3A%20The%20price%20in%20British%20Pounds%20%28float%29%0A-%20%60eta_minutes%60%3A%20Estimated%20time%20of%20arrival%20in%20minutes%20%28integer%29%0A%0A%2A%2AUsage%3A%2A%2A%0A%0A-%20The%20sender%20serializes%20the%20request%20object%20to%20a%20JSON%20string%20and%20sends%20it.%0A-%20The%20receiver%20parses%20the%20JSON%20string%2C%20processes%20the%20request%2C%20and%20returns%20a%20JSON%20string%20response.%0A-%20Only%20one%20message%20is%20sent%20and%20one%20received.&quot;
+  ],
+  &quot;body&quot;: &quot;{\&quot;pickup\&quot;: \&quot;1 High St, London\&quot;, \&quot;dropoff\&quot;: \&quot;22 Park Rd, London\&quot;, \&quot;weight_kg\&quot;: 6}&quot;
+}</pre></details></div>
+  <div class="msg in pd"><div class="who">courier → shop <span class="by routine">courier: routine · 0 tokens</span> <span class="secs">0.0s</span></div>
+    <pre>{
+  &quot;price_gbp&quot;: 11.7,
+  &quot;eta_minutes&quot;: 35
+}</pre>
+    <details><summary>Agora envelope</summary><pre>{
+  &quot;body&quot;: &quot;{\&quot;price_gbp\&quot;: 11.7, \&quot;eta_minutes\&quot;: 35}&quot;,
+  &quot;status&quot;: &quot;success&quot;
+}</pre></details></div>
+  
+</section>
+<section class="call" id="call-7">
+  <header><span class="n">Call 7</span><span class="tag pd">Protocol</span>
+    <span class="task">1 High St, London → 22 Park Rd, London, 1.5 kg</span>
+    <span class="res ok">{&quot;price_gbp&quot;: 6.3, &quot;eta_minutes&quot;: 35} ✓</span>
+    <span class="secs">0.0s · $0.00000</span></header>
+  
+  <div class="msg out pd"><div class="who">shop → courier <span class="tag pd">Protocol</span> <span class="by routine">shop: routine · 0 tokens</span></div>
+    <pre>{
+  &quot;pickup&quot;: &quot;1 High St, London&quot;,
+  &quot;dropoff&quot;: &quot;22 Park Rd, London&quot;,
+  &quot;weight_kg&quot;: 1.5
+}</pre>
+    <details><summary>Agora envelope</summary><pre>{
+  &quot;protocolHash&quot;: &quot;R76IEp+ovRD9v0P1LVO4bToqSEE=&quot;,
+  &quot;protocolSources&quot;: [
+    &quot;data:text/plain;charset=utf-8,---%0Aname%3A%20CourierQuoteProtocol%0Adescription%3A%20This%20protocol%20is%20for%20requesting%20a%20delivery%20quote%20from%20a%20courier%20service%2C%20providing%20pickup%2C%20drop-off%2C%20weight%2C%20and%20optionally%20a%20target%20URL%2C%20and%20receiving%20a%20price%20and%20ETA%20in%20response.%0Amultiround%3A%20false%0A---%0A%0A%2A%2AProtocol%20Description%3A%2A%2A%0A%0AThis%20is%20a%20single-message%20protocol%20where%20a%20client%20sends%20a%20JSON%20string%20containing%20delivery%20request%20parameters%2C%20and%20the%20service%20responds%20with%20a%20JSON%20string%20containing%20the%20quote%20information.%0A%0A%2A%2ARequest%20Format%3A%2A%2A%0A%0AA%20JSON%20string%20with%20the%20following%20structure%3A%0A%60%60%60json%0A%7B%0A%20%20%22pickup%22%3A%20%22string%22%2C%0A%20%20%22dropoff%22%3A%20%22string%22%2C%0A%20%20%22weight_kg%22%3A%20%22number%22%2C%0A%20%20%22target%22%3A%20%22string%20%28optional%29%22%0A%7D%0A%60%60%60%0A%0A-%20%60pickup%60%3A%20The%20pickup%20address%20%28string%2C%20required%29%0A-%20%60dropoff%60%3A%20The%20drop-off%20address%20%28string%2C%20required%29%0A-%20%60weight_kg%60%3A%20The%20parcel%20weight%20in%20kilograms%20%28number%2C%20required%29%0A-%20%60target%60%3A%20Optional%20URL%20of%20the%20target%20system%20%28string%2C%20optional%2C%20may%20be%20ignored%29%0A%0A%2A%2AResponse%20Format%3A%2A%2A%0A%0AA%20JSON%20string%20with%20the%20following%20structure%3A%0A%60%60%60json%0A%7B%0A%20%20%22price_gbp%22%3A%20%22number%22%2C%0A%20%20%22eta_minutes%22%3A%20%22integer%22%0A%7D%0A%60%60%60%0A%0A-%20%60price_gbp%60%3A%20The%20price%20in%20British%20Pounds%20%28float%29%0A-%20%60eta_minutes%60%3A%20Estimated%20time%20of%20arrival%20in%20minutes%20%28integer%29%0A%0A%2A%2AUsage%3A%2A%2A%0A%0A-%20The%20sender%20serializes%20the%20request%20object%20to%20a%20JSON%20string%20and%20sends%20it.%0A-%20The%20receiver%20parses%20the%20JSON%20string%2C%20processes%20the%20request%2C%20and%20returns%20a%20JSON%20string%20response.%0A-%20Only%20one%20message%20is%20sent%20and%20one%20received.&quot;
+  ],
+  &quot;body&quot;: &quot;{\&quot;pickup\&quot;: \&quot;1 High St, London\&quot;, \&quot;dropoff\&quot;: \&quot;22 Park Rd, London\&quot;, \&quot;weight_kg\&quot;: 1.5}&quot;
+}</pre></details></div>
+  <div class="msg in pd"><div class="who">courier → shop <span class="by routine">courier: routine · 0 tokens</span> <span class="secs">0.0s</span></div>
+    <pre>{
+  &quot;price_gbp&quot;: 6.3,
+  &quot;eta_minutes&quot;: 35
+}</pre>
+    <details><summary>Agora envelope</summary><pre>{
+  &quot;body&quot;: &quot;{\&quot;price_gbp\&quot;: 6.3, \&quot;eta_minutes\&quot;: 35}&quot;,
+  &quot;status&quot;: &quot;success&quot;
+}</pre></details></div>
+  
+</section>
+<section class="call" id="call-8">
+  <header><span class="n">Call 8</span><span class="tag pd">Protocol</span>
+    <span class="task">1 High St, London → 22 Park Rd, London, 2 kg</span>
+    <span class="res ok">{&quot;price_gbp&quot;: 6.9, &quot;eta_minutes&quot;: 35} ✓</span>
+    <span class="secs">0.0s · $0.00000</span></header>
+  
+  <div class="msg out pd"><div class="who">shop → courier <span class="tag pd">Protocol</span> <span class="by routine">shop: routine · 0 tokens</span></div>
+    <pre>{
+  &quot;pickup&quot;: &quot;1 High St, London&quot;,
+  &quot;dropoff&quot;: &quot;22 Park Rd, London&quot;,
+  &quot;weight_kg&quot;: 2
+}</pre>
+    <details><summary>Agora envelope</summary><pre>{
+  &quot;protocolHash&quot;: &quot;R76IEp+ovRD9v0P1LVO4bToqSEE=&quot;,
+  &quot;protocolSources&quot;: [
+    &quot;data:text/plain;charset=utf-8,---%0Aname%3A%20CourierQuoteProtocol%0Adescription%3A%20This%20protocol%20is%20for%20requesting%20a%20delivery%20quote%20from%20a%20courier%20service%2C%20providing%20pickup%2C%20drop-off%2C%20weight%2C%20and%20optionally%20a%20target%20URL%2C%20and%20receiving%20a%20price%20and%20ETA%20in%20response.%0Amultiround%3A%20false%0A---%0A%0A%2A%2AProtocol%20Description%3A%2A%2A%0A%0AThis%20is%20a%20single-message%20protocol%20where%20a%20client%20sends%20a%20JSON%20string%20containing%20delivery%20request%20parameters%2C%20and%20the%20service%20responds%20with%20a%20JSON%20string%20containing%20the%20quote%20information.%0A%0A%2A%2ARequest%20Format%3A%2A%2A%0A%0AA%20JSON%20string%20with%20the%20following%20structure%3A%0A%60%60%60json%0A%7B%0A%20%20%22pickup%22%3A%20%22string%22%2C%0A%20%20%22dropoff%22%3A%20%22string%22%2C%0A%20%20%22weight_kg%22%3A%20%22number%22%2C%0A%20%20%22target%22%3A%20%22string%20%28optional%29%22%0A%7D%0A%60%60%60%0A%0A-%20%60pickup%60%3A%20The%20pickup%20address%20%28string%2C%20required%29%0A-%20%60dropoff%60%3A%20The%20drop-off%20address%20%28string%2C%20required%29%0A-%20%60weight_kg%60%3A%20The%20parcel%20weight%20in%20kilograms%20%28number%2C%20required%29%0A-%20%60target%60%3A%20Optional%20URL%20of%20the%20target%20system%20%28string%2C%20optional%2C%20may%20be%20ignored%29%0A%0A%2A%2AResponse%20Format%3A%2A%2A%0A%0AA%20JSON%20string%20with%20the%20following%20structure%3A%0A%60%60%60json%0A%7B%0A%20%20%22price_gbp%22%3A%20%22number%22%2C%0A%20%20%22eta_minutes%22%3A%20%22integer%22%0A%7D%0A%60%60%60%0A%0A-%20%60price_gbp%60%3A%20The%20price%20in%20British%20Pounds%20%28float%29%0A-%20%60eta_minutes%60%3A%20Estimated%20time%20of%20arrival%20in%20minutes%20%28integer%29%0A%0A%2A%2AUsage%3A%2A%2A%0A%0A-%20The%20sender%20serializes%20the%20request%20object%20to%20a%20JSON%20string%20and%20sends%20it.%0A-%20The%20receiver%20parses%20the%20JSON%20string%2C%20processes%20the%20request%2C%20and%20returns%20a%20JSON%20string%20response.%0A-%20Only%20one%20message%20is%20sent%20and%20one%20received.&quot;
+  ],
+  &quot;body&quot;: &quot;{\&quot;pickup\&quot;: \&quot;1 High St, London\&quot;, \&quot;dropoff\&quot;: \&quot;22 Park Rd, London\&quot;, \&quot;weight_kg\&quot;: 2}&quot;
+}</pre></details></div>
+  <div class="msg in pd"><div class="who">courier → shop <span class="by routine">courier: routine · 0 tokens</span> <span class="secs">0.0s</span></div>
+    <pre>{
+  &quot;price_gbp&quot;: 6.9,
+  &quot;eta_minutes&quot;: 35
+}</pre>
+    <details><summary>Agora envelope</summary><pre>{
+  &quot;body&quot;: &quot;{\&quot;price_gbp\&quot;: 6.9, \&quot;eta_minutes\&quot;: 35}&quot;,
+  &quot;status&quot;: &quot;success&quot;
+}</pre></details></div>
+  
+</section>
+</main></body></html>

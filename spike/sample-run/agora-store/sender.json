@@ -1,0 +1,28 @@
+{
+  "protocols": {
+    "R76IEp+ovRD9v0P1LVO4bToqSEE=": {
+      "document": "---\nname: CourierQuoteProtocol\ndescription: This protocol is for requesting a delivery quote from a courier service, providing pickup, drop-off, weight, and optionally a target URL, and receiving a price and ETA in response.\nmultiround: false\n---\n\n**Protocol Description:**\n\nThis is a single-message protocol where a client sends a JSON string containing delivery request parameters, and the service responds with a JSON string containing the quote information.\n\n**Request Format:**\n\nA JSON string with the following structure:\n```json\n{\n  \"pickup\": \"string\",\n  \"dropoff\": \"string\",\n  \"weight_kg\": \"number\",\n  \"target\": \"string (optional)\"\n}\n```\n\n- `pickup`: The pickup address (string, required)\n- `dropoff`: The drop-off address (string, required)\n- `weight_kg`: The parcel weight in kilograms (number, required)\n- `target`: Optional URL of the target system (string, optional, may be ignored)\n\n**Response Format:**\n\nA JSON string with the following structure:\n```json\n{\n  \"price_gbp\": \"number\",\n  \"eta_minutes\": \"integer\"\n}\n```\n\n- `price_gbp`: The price in British Pounds (float)\n- `eta_minutes`: Estimated time of arrival in minutes (integer)\n\n**Usage:**\n\n- The sender serializes the request object to a JSON string and sends it.\n- The receiver parses the JSON string, processes the request, and returns a JSON string response.\n- Only one message is sent and one received.",
+      "sources": [],
+      "metadata": {
+        "name": "CourierQuoteProtocol",
+        "description": "This protocol is for requesting a delivery quote from a courier service, providing pickup, drop-off, weight, and optionally a target URL, and receiving a price and ETA in response.",
+        "multiround": false
+      },
+      "implementation": "import json\n\ndef run(task_data):\n    \"\"\"\n    Send a delivery quote request to the courier service and return the quote.\n    \n    Args:\n        task_data: Dictionary containing pickup, dropoff, weight_kg, and optional target\n        \n    Returns:\n        Dictionary with price_gbp (float) and eta_minutes (int)\n    \"\"\"\n    # Prepare the request payload\n    request_payload = {\n        \"pickup\": task_data[\"pickup\"],\n        \"dropoff\": task_data[\"dropoff\"],\n        \"weight_kg\": task_data[\"weight_kg\"]\n    }\n    \n    # Add target if provided\n    if \"target\" in task_data:\n        request_payload[\"target\"] = task_data[\"target\"]\n    \n    # Convert to JSON string\n    request_json = json.dumps(request_payload)\n    \n    # Send to server and get response\n    response_json = send_to_server(request_json)\n    \n    # Parse the response\n    try:\n        response_data = json.loads(response_json)\n        return response_data\n    except json.JSONDecodeError as e:\n        raise Exception(f\"Failed to parse server response as JSON: {response_json}\") from e",
+      "suitability": {
+        "get_delivery_quote": {
+          "default": "unknown",
+          "overrides": {
+            "http://localhost:5055": "adequate"
+          }
+        }
+      },
+      "conversations": 6
+    }
+  },
+  "num_conversations": {
+    "get_delivery_quote": {
+      "http://localhost:5055": 8
+    }
+  }
+}

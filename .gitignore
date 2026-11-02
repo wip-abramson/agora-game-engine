@@ -1,0 +1,8 @@
+venv/
+.venv/
+run*/
+.agora/
+node_modules/
+.wrangler/
+.dev.vars
+.env*
