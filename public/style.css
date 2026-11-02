@@ -21,3 +21,13 @@ a { color:var(--x) } .sub { color:var(--mute) } code { font:13px ui-monospace, m
 .text { white-space:pre-wrap; word-break:break-word; margin-top:4px }
 table { width:100%; border-collapse:collapse } td, th { text-align:left; padding:8px; border-bottom:1px solid var(--line); font-size:14px }
 .live { color:var(--pd) } .dead { color:var(--o) }
+.lede { font-size:17px; color:var(--ink); max-width:760px }
+.card p { max-width:760px }
+.ladder { list-style:none; padding:0; margin:16px 0; display:grid; gap:10px }
+.ladder li { border-left:3px solid var(--c); background:var(--bg); border-radius:6px; padding:10px 12px }
+.ladder .tag { background:var(--c); margin-right:8px } .ladder b { margin-right:4px }
+.nl { --c:var(--nl) } .neg { --c:#7a5cc4 } .pd { --c:var(--pd) }
+.phases td { vertical-align:top } .phases td:first-child { width:70px }
+.pill { font-size:12px; font-weight:600; padding:2px 8px; border-radius:20px; background:#eef0f6; color:var(--mute) }
+.pill.now { background:#e0f3ea; color:#1d6b4c }
+.code { background:#1d2330; color:#e6e9ef; border-radius:6px; padding:12px; overflow:auto; font:13px/1.45 ui-monospace, monospace; white-space:pre }
