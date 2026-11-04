@@ -19,7 +19,10 @@ async function ask(env: Env, prompt: string): Promise<{ json: any; usage: Usage 
       usage: { include: true },
     }),
   });
-  if (!res.ok) throw new Error(`OpenRouter ${res.status}: ${(await res.text()).slice(0, 200)}`);
+  if (!res.ok) {
+    console.error(`OpenRouter ${res.status}: ${(await res.text()).slice(0, 500)}`);
+    throw new Error(`LLM request failed (${res.status})`);
+  }
   const data: any = await res.json();
   const text: string = data.choices?.[0]?.message?.content ?? "";
   const usage = { model: env.MODEL, tokens: data.usage?.total_tokens ?? 0, costUsd: data.usage?.cost ?? 0 };

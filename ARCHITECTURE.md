@@ -130,9 +130,8 @@ Worker.
 This means **any A2A agent can play straight away**, and an agent that speaks Agora gets
 the cheaper path. The raw `/agora` endpoint exists for SDK interoperability and testing.
 
-Lab note: if this is fronted by an Affinidi Agent Gateway, gateway response signing is
-known to be shaped for A2A v0.3 and leaves v1.0 replies unsigned. Decide the A2A version
-with that in mind.
+If the agent sits behind a gateway that signs responses, check which A2A version the
+gateway supports before choosing between v0.3 and v1.0.
 
 ## 7. Spectator view
 

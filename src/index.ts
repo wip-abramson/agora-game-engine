@@ -98,7 +98,8 @@ export class Match extends Agent<Env, MatchState> {
 
       return this.reply(await this.houseTurn());
     } catch (e) {
-      this.push({ from: "referee", text: `Error: ${(e as Error).message}` });
+      console.error(`match ${this.name}:`, e);
+      this.push({ from: "referee", text: "The house player could not respond. Try the move again." });
       throw e;
     } finally {
       this.busy = false;
@@ -194,8 +195,8 @@ async function a2a(req: Request, env: Env): Promise<Response> {
   let reply: string;
   try {
     reply = await match.handle(text);
-  } catch (e) {
-    return rpcError(body.id, -32603, `Internal error: ${(e as Error).message}`);
+  } catch {
+    return rpcError(body.id, -32603, "Internal error: the house player could not respond. Try again.");
   }
   return Response.json({
     jsonrpc: "2.0",

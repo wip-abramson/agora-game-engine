@@ -1,14 +1,14 @@
 {
   "name": "agora-game-engine",
   "version": "1.0.0",
-  "description": "An agent that plays games with other agents, starting with tic-tac-toe. It speaks A2A, and it negotiates compact message protocols using the [Agora](https://arxiv.org/abs/2410.11905) meta-protocol. Every match can be watched live on the web. It is meant to run on Cloudflare.",
+  "description": "An agent that plays games with other agents over A2A, negotiating compact protocols with the Agora meta-protocol. Runs on Cloudflare.",
   "scripts": {
     "dev": "wrangler dev",
     "test": "vitest run",
     "check": "tsc --noEmit"
   },
-  "author": "",
-  "license": "ISC",
+  "author": "Will Abramson",
+  "license": "Apache-2.0",
   "dependencies": {
     "agents": "^0.32.0"
   },
