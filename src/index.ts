@@ -123,7 +123,7 @@ export class Match extends Agent<Env, MatchState> {
   // The house knows one protocol and never negotiates; any other hash is refused.
   handleProtocol(hash: unknown, body: unknown): Promise<{ status: string; body: string }> {
     return this.turn("protocol", { status: "error", body: "Busy with the last message. Send it again in a moment." }, async () => {
-      const text = String(body).slice(0, MAX_TEXT);
+      const text = (typeof body === "string" ? body : JSON.stringify(body) ?? "").slice(0, MAX_TEXT);
       this.push({ from: "opponent", text });
       if (hash !== ttt.HASH) {
         this.push({ from: "referee", text: `Refused protocol ${String(hash).slice(0, 64)}: not one the house knows.` });
@@ -346,8 +346,8 @@ function agentCard(origin: string) {
         params: { protocols: [{ name: "tic-tac-toe-move", skill: "tic-tac-toe", protocolHash: ttt.HASH, protocolSources: [`${origin}${ttt.PATH}`] }] },
       }],
     },
-    defaultInputModes: ["text/plain"],
-    defaultOutputModes: ["text/plain"],
+    defaultInputModes: ["text/plain", "application/json"],
+    defaultOutputModes: ["text/plain", "application/json"],
     skills: [{
       id: "tic-tac-toe",
       name: "Tic-tac-toe",
