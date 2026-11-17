@@ -2,6 +2,7 @@ import { Agent, getAgentByName, routeAgentRequest, type Connection, type Connect
 import { chooseMove, parseMove, type Usage } from "./brain";
 import { baselines, botMove, cooperators, drawBots, G, history, hit, metrics, parseMove as parseCrdMove, payoff, position, rng, RULES, type Baselines, type Cell, type Metrics } from "./crd";
 import { empty, legalMoves, play, render, result, checkMove, type Board, type Mark, type Result } from "./engine";
+import * as ttt from "./protocol";
 
 type Env = {
   Match: DurableObjectNamespace<Match>;
@@ -13,12 +14,11 @@ type Env = {
   MODEL: string;
 };
 
-// Every entry is shown to spectators as text. kind is always "natural language" in v0;
-// v1 adds "negotiation" and "protocol".
+// Every entry is shown to spectators as text. "protocol" marks a turn sent as an Agora protocol message.
 type Entry = {
   at: string;
   from: "opponent" | "house" | "referee";
-  kind: "natural language";
+  kind: "natural language" | "protocol";
   text: string;
   cell?: number;
   llm?: Usage;
@@ -49,6 +49,7 @@ export class Match extends Agent<Env, MatchState> {
     id: "", board: empty(), result: null, opponent: "X", house: "O", model: "", log: [], costUsd: 0, lastCell: null, updatedAt: "",
   };
   private busy = false; // in memory: a second message while we wait on the LLM is refused
+  private kind: Entry["kind"] = "natural language"; // of the turn being handled
 
   // All WebSocket clients are spectators. Moves arrive only by RPC from the Worker.
   shouldConnectionBeReadonly(_c: Connection, _ctx: ConnectionContext) {
@@ -57,7 +58,7 @@ export class Match extends Agent<Env, MatchState> {
 
   private push(e: Omit<Entry, "at" | "kind">) {
     const s = this.state;
-    const log = [...s.log, { at: now(), kind: "natural language" as const, ...e }].slice(-MAX_LOG);
+    const log = [...s.log, { at: now(), kind: this.kind, ...e }].slice(-MAX_LOG);
     this.setState({ ...s, id: this.name, model: this.env.MODEL, log, costUsd: s.costUsd + (e.llm?.costUsd ?? 0), updatedAt: now() });
   }
 
@@ -77,10 +78,25 @@ export class Match extends Agent<Env, MatchState> {
     return `${lead}\n\n${render(this.state.board)}\n\n${this.status()}`.trim();
   }
 
-  async handle(text: string): Promise<string> {
-    if (this.busy) return "I'm still thinking about the last message. Send your move again in a moment.";
+  // One turn at a time; every turn ends with a lobby report.
+  private async turn<T>(kind: Entry["kind"], busy: T, fn: () => Promise<T>): Promise<T> {
+    if (this.busy) return busy;
     this.busy = true;
+    this.kind = kind;
     try {
+      return await fn();
+    } catch (e) {
+      console.error(`match ${this.name}:`, e);
+      this.push({ from: "referee", text: "The house player could not respond. Try the move again." });
+      throw e;
+    } finally {
+      this.busy = false;
+      await this.report();
+    }
+  }
+
+  handle(text: string): Promise<string> {
+    return this.turn("natural language", "I'm still thinking about the last message. Send your move again in a moment.", async () => {
       text = text.slice(0, MAX_TEXT);
       if (this.state.result) return this.reply("This game is finished.");
       this.push({ from: "opponent", text });
@@ -100,14 +116,38 @@ export class Match extends Agent<Env, MatchState> {
       if (this.state.result) return this.reply("");
 
       return this.reply(await this.houseTurn());
-    } catch (e) {
-      console.error(`match ${this.name}:`, e);
-      this.push({ from: "referee", text: "The house player could not respond. Try the move again." });
-      throw e;
-    } finally {
-      this.busy = false;
-      await this.report();
-    }
+    });
+  }
+
+  // An Agora protocol message: {protocolHash, protocolSources, body} in, {status, body} out.
+  // The house knows one protocol and never negotiates; any other hash is refused.
+  handleProtocol(hash: unknown, body: unknown): Promise<{ status: string; body: string }> {
+    return this.turn("protocol", { status: "error", body: "Busy with the last message. Send it again in a moment." }, async () => {
+      const text = String(body).slice(0, MAX_TEXT);
+      this.push({ from: "opponent", text });
+      if (hash !== ttt.HASH) {
+        this.push({ from: "referee", text: `Refused protocol ${String(hash).slice(0, 64)}: not one the house knows.` });
+        return { status: "rejected", body: `Unknown protocol. This engine accepts ${ttt.HASH} (${ttt.PATH}).` };
+      }
+      const switched = `Opponent switched to Agora protocol tic-tac-toe-move (${ttt.HASH}).`;
+      if (!this.state.log.some((e) => e.text === switched)) this.push({ from: "referee", text: switched });
+
+      const out = (status: ttt.Reply["status"], cell: number | null, error?: string) => ({
+        status: "success",
+        body: JSON.stringify({ status, cell, board: ttt.boardString(this.state.board), result: this.state.result, ...(error && { error }) }),
+      });
+      if (this.state.result) return out("over", null);
+      const d = ttt.decode(text, this.state.board, this.state.opponent);
+      if ("error" in d) {
+        this.push({ from: "referee", text: `Rejected: ${d.error}.` });
+        return out("invalid", null, d.error);
+      }
+      this.push({ from: "referee", text: `Opponent takes cell ${d.cell}.`, cell: d.cell });
+      this.move(d.cell, this.state.opponent);
+      if (this.state.result) return out("ok", null);
+      await this.houseTurn();
+      return out("ok", this.state.lastCell);
+    });
   }
 
   // The LLM gets HOUSE_TRIES attempts at a legal move, then a random legal move is played.
@@ -117,7 +157,8 @@ export class Match extends Agent<Env, MatchState> {
       const c = await chooseMove(this.env, this.state.board, house);
       const err = checkMove(this.state.board, c.cell, house);
       if (!err) {
-        this.push({ from: "house", text: c.say || `I take cell ${c.cell}.`, cell: c.cell!, llm: c.usage });
+        const said = this.kind === "protocol" ? JSON.stringify({ cell: c.cell }) : c.say || `I take cell ${c.cell}.`;
+        this.push({ from: "house", text: said, cell: c.cell!, llm: c.usage });
         this.move(c.cell!, house);
         return `${c.say} (I take cell ${c.cell}.)`.trim();
       }
@@ -294,7 +335,17 @@ function agentCard(origin: string) {
     url: `${origin}/a2a`,
     preferredTransport: "JSONRPC",
     version: "0.0.1",
-    capabilities: { streaming: false, pushNotifications: false },
+    capabilities: {
+      streaming: false,
+      pushNotifications: false,
+      // Agora: send a DataPart {agora: {protocolHash, protocolSources, body}} instead of text to use a protocol.
+      extensions: [{
+        uri: "https://agoraprotocol.org",
+        description: "Agora protocols this engine accepts in place of plain language. Reply is a DataPart {agora: {status, body}}.",
+        required: false,
+        params: { protocols: [{ name: "tic-tac-toe-move", skill: "tic-tac-toe", protocolHash: ttt.HASH, protocolSources: [`${origin}${ttt.PATH}`] }] },
+      }],
+    },
     defaultInputModes: ["text/plain"],
     defaultOutputModes: ["text/plain"],
     skills: [{
@@ -327,7 +378,8 @@ async function a2a(req: Request, env: Env): Promise<Response> {
   const text = Array.isArray(msg?.parts)
     ? msg.parts.filter((p: any) => p?.kind === "text" && typeof p.text === "string").map((p: any) => p.text).join("\n")
     : "";
-  if (!text) return rpcError(body.id, -32602, "Invalid params: message needs a text part");
+  const agora = Array.isArray(msg?.parts) ? msg.parts.find((p: any) => p?.kind === "data" && p.data?.agora)?.data.agora : undefined;
+  if (!text && !agora) return rpcError(body.id, -32602, "Invalid params: message needs a text part or an Agora data part");
   const contextId: string = msg.contextId ?? crypto.randomUUID();
   if (!/^[\w-]{1,64}$/.test(contextId)) return rpcError(body.id, -32602, "Invalid params: contextId must be 1-64 of [A-Za-z0-9_-]");
 
@@ -336,9 +388,11 @@ async function a2a(req: Request, env: Env): Promise<Response> {
   const crd = await getAgentByName(env.Crd, contextId);
   const isCrd = (await crd.active()) || CRD_START.test(text);
   const spectate = `${origin}/${isCrd ? "crd" : "matches"}/${contextId}`;
-  let reply: string;
+  let reply: string | { status: string; body: string };
   try {
-    reply = isCrd ? await crd.handle(text, spectate) : await (await getAgentByName(env.Match, contextId)).handle(text);
+    if (agora && isCrd) reply = { status: "rejected", body: "This engine has no protocol for the Collective Risk Dilemma; reply in text." };
+    else if (agora) reply = await (await getAgentByName(env.Match, contextId)).handleProtocol(agora.protocolHash, agora.body);
+    else reply = isCrd ? await crd.handle(text, spectate) : await (await getAgentByName(env.Match, contextId)).handle(text);
   } catch {
     return rpcError(body.id, -32603, "Internal error: the house player could not respond. Try again.");
   }
@@ -350,7 +404,7 @@ async function a2a(req: Request, env: Env): Promise<Response> {
       role: "agent",
       messageId: crypto.randomUUID(),
       contextId,
-      parts: [{ kind: "text", text: reply }],
+      parts: [typeof reply === "string" ? { kind: "text", text: reply } : { kind: "data", data: { agora: reply } }],
       metadata: { spectate },
     },
   });
@@ -361,6 +415,7 @@ export default {
     const url = new URL(req.url);
     if (url.pathname === "/.well-known/agent-card.json") return Response.json(agentCard(url.origin));
     if (url.pathname === "/a2a" && req.method === "POST") return a2a(req, env);
+    if (url.pathname === ttt.PATH) return new Response(ttt.DOC, { headers: { "content-type": "text/markdown; charset=utf-8" } });
     if (url.pathname.startsWith("/matches/")) return env.ASSETS.fetch(new URL("/match", url));
     if (url.pathname.startsWith("/crd/")) return env.ASSETS.fetch(new URL("/crd", url));
     // Only spectator WebSockets reach the agents directly; they are read-only.

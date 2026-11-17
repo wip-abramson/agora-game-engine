@@ -1,33 +1,47 @@
-// Plays one full match against the agent over A2A, as a plain-language opponent.
+// Plays one full match against the agent over A2A: opens in plain language, then switches to the
+// Agora protocol the agent card advertises (after showing that an unknown protocol is refused).
 // Usage: node scripts/play.mjs [baseUrl] [matchId]
 const base = process.argv[2] ?? "http://localhost:8787";
 const contextId = process.argv[3] ?? `demo-${Date.now()}`;
-const say = {
-  5: "I'll take the centre", 1: "top left please", 9: "bottom right corner", 3: "the top right square",
-  7: "bottom left", 2: "top middle", 4: "middle left", 6: "middle right", 8: "bottom middle",
-};
+const order = [5, 1, 9, 3, 7, 2, 4, 6, 8];
 
-async function send(text) {
+async function send(part) {
   const res = await fetch(`${base}/a2a`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       jsonrpc: "2.0", id: crypto.randomUUID(), method: "message/send",
-      params: { message: { kind: "message", role: "user", messageId: crypto.randomUUID(), contextId, parts: [{ kind: "text", text }] } },
+      params: { message: { kind: "message", role: "user", messageId: crypto.randomUUID(), contextId, parts: [part] } },
     }),
   });
   const body = await res.json();
   if (body.error) throw new Error(JSON.stringify(body.error));
-  return body.result.parts[0].text;
+  const p = body.result.parts[0];
+  return p.kind === "text" ? p.text : p.data.agora;
 }
+const say = async (text) => { const r = await send({ kind: "text", text }); console.log(`> ${text}\n${r}\n`); return r; };
+const agora = async (protocolHash, protocolSources, body) => {
+  const r = await send({ kind: "data", data: { agora: { protocolHash, protocolSources, body } } });
+  console.log(`> [${protocolHash}] ${body}\n${JSON.stringify(r)}\n`);
+  return r;
+};
 
-console.log(`Spectate: ${base}/matches/${contextId}\n`);
-let reply = await send("Fancy a game of tic-tac-toe?");
-console.log(`> Fancy a game of tic-tac-toe?\n${reply}\n`);
-for (const cell of Object.keys(say)) {
-  if (/again|finished/.test(reply)) break;
-  // Only name cells the board still shows as free (empty cells are shown as their number).
-  if (!new RegExp(`(^|[ |])${cell}([ |]|$)`, "m").test(reply)) continue;
-  reply = await send(say[cell]);
-  console.log(`> ${say[cell]}\n${reply}\n`);
+const card = await (await fetch(`${base}/.well-known/agent-card.json`)).json();
+const proto = card.capabilities.extensions.find((x) => x.uri === "https://agoraprotocol.org").params.protocols[0];
+console.log(`Spectate: ${base}/matches/${contextId}\nAdvertised protocol: ${proto.name} ${proto.protocolHash}\n`);
+
+await say("Fancy a game of tic-tac-toe?");
+let reply = await say("I'll take the centre");
+if (/again|finished/.test(reply)) process.exit(0);
+
+await agora("bm90LWEtcmVhbC1wcm90b2NvbA==", [], JSON.stringify({ cell: 1 })); // refused: unknown hash
+
+// The board in the plain-language reply shows free cells as their numbers.
+let free = new Set(order.filter((c) => new RegExp(`(^|[ |])${c}([ |]|$)`, "m").test(reply)));
+for (const cell of order) {
+  if (!free.has(cell)) continue;
+  const r = await agora(proto.protocolHash, proto.protocolSources, JSON.stringify({ cell }));
+  const out = JSON.parse(r.body);
+  if (out.result) { console.log(`Result: ${out.result}`); break; }
+  free = new Set([...out.board].flatMap((c, i) => (c === "." ? [i + 1] : [])));
 }
