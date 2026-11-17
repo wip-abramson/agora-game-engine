@@ -1,0 +1,63 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Collective risk match · Agora game engine</title><link rel="stylesheet" href="/style.css"></head><body><main>
+<p><a href="/">← all matches</a></p>
+<h1>Collective risk <code id="id"></code></h1>
+<p class="sub">An A2A caller plus 3 house bots · 4 players, 10 rounds · each round pays everyone 2 if at least 2 cooperate · anonymous: players see only how many others cooperated · <span id="status"></span></p>
+<div class="stats" id="stats"><div class="stat"><b id="round">–</b><span>round</span></div><div class="stat"><b id="deadline">–</b><span>next deadline</span></div></div>
+<div class="card"><h2>Rounds</h2>
+  <div class="crd-wrap"><table class="crd" id="grid"></table></div>
+  <p class="sub">C cooperate · D defect · <span class="to">∅</span> timed out (pays 0). Bars show how many cooperated; the dashed line is the threshold. House bots are named when the match ends.</p>
+</div>
+<div class="card" id="results" hidden><h2>Result for the caller</h2>
+  <table><thead><tr><th></th><th>Caller</th><th>House collective avg</th><th>House selfish avg</th><th>Fair play</th></tr></thead><tbody id="metrics"></tbody></table>
+  <p class="sub">Payoff is the total over 10 rounds. Hit-rate is the share of rounds in which at least 2 cooperated. Burden share is the caller's share of all the cooperation in the match; taking turns fairly gives 25%. The averages come from house bots playing in the caller's seat against 3 other house bots.</p>
+</div>
+<div class="card"><h2>Messages</h2><div id="log"><p class="sub">Waiting for the first message.</p></div></div>
+</main><script type="module">
+import { spectate, el } from "/spectate.js";
+const M = 2, N = 4, R = 10;
+const id = decodeURIComponent(location.pathname.split("/").pop());
+const $ = (x) => document.getElementById(x);
+$("id").textContent = id;
+const pct = (x) => (x == null ? "n/a" : `${Math.round(x * 100)}%`);
+spectate("crd", id, (s) => {
+  const head = el("tr"); head.append(el("th"), ...Array.from({ length: R }, (_, i) => el("th", null, i + 1)), el("th", null, "payoff"));
+  const rows = s.seats.map((name, seat) => {
+    const tr = el("tr"); tr.append(el("th", seat ? "" : "you", seat ? (name === "house" ? `House ${seat}` : name) : "Caller"));
+    let total = 0;
+    for (let t = 0; t < R; t++) {
+      const rd = s.moves[t], a = rd?.[seat];
+      if (rd) { const c = rd.filter((x) => x === "C").length; total += a == null ? 0 : (a === "D" ? 1 : 0) + (c >= M ? 2 : 0); }
+      tr.append(el("td", rd ? (a ?? "to") : "", rd ? (a ?? "∅") : ""));
+    }
+    tr.append(el("td", "sum", s.moves.length ? total : ""));
+    return tr;
+  });
+  const bars = el("tr"); bars.append(el("th", null, "cooperated"));
+  for (let t = 0; t < R; t++) {
+    const rd = s.moves[t], c = rd ? rd.filter((x) => x === "C").length : 0, td = el("td", "bar");
+    if (rd) { const b = el("div", c >= M ? "hit" : "miss"); b.style.height = `${(c / N) * 100}%`; b.title = `${c} of ${N}`; td.append(b, el("span", null, c)); }
+    td.append(el("i", "line")); bars.append(td);
+  }
+  bars.append(el("td"));
+  $("grid").replaceChildren(head, ...rows, bars);
+  $("round").textContent = s.done ? "finished" : s.id ? `${s.moves.length + 1} of ${R}` : "–";
+  $("deadline").textContent = s.deadline ? new Date(s.deadline).toLocaleTimeString() : "–";
+  if (s.result) {
+    const { you, baselines: b } = s.result;
+    const row = (label, f, fair) => { const tr = el("tr"); tr.append(el("td", null, label), el("td", "you", f(you)), el("td", null, f(b.collective)), el("td", null, f(b.selfish)), el("td", "sub", fair)); return tr; };
+    $("metrics").replaceChildren(
+      row("Payoff", (x) => (+x.payoff.toFixed(1)).toString(), "25 (2 of 4 cooperate each round, taking turns)"),
+      row("Hit-rate", (x) => pct(x.hitRate), "100%"),
+      row("Burden share", (x) => pct(x.burden), "25%"));
+    $("results").hidden = false;
+  }
+  if (!s.log.length) return;
+  $("log").replaceChildren(...s.log.map((e) => {
+    const box = el("div", `msg ${e.from === "agent" ? "opponent" : "referee"}`), who = el("div", "who");
+    who.append(el("span", null, e.from === "agent" ? "Caller" : "Referee"), el("span", "sub", new Date(e.at).toLocaleTimeString()));
+    box.append(who, el("div", "text", e.text));
+    return box;
+  }));
+}, $("status"));
+</script></body></html>

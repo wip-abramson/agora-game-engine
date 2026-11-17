@@ -1,10 +1,13 @@
 import { Agent, getAgentByName, routeAgentRequest, type Connection, type ConnectionContext } from "agents";
 import { chooseMove, parseMove, type Usage } from "./brain";
+import { baselines, botMove, cooperators, drawBots, G, history, hit, metrics, parseMove as parseCrdMove, payoff, position, rng, RULES, type Baselines, type Cell, type Metrics } from "./crd";
 import { empty, legalMoves, play, render, result, checkMove, type Board, type Mark, type Result } from "./engine";
 
 type Env = {
   Match: DurableObjectNamespace<Match>;
   Lobby: DurableObjectNamespace<Lobby>;
+  Crd: DurableObjectNamespace<Crd>;
+  CRD_ROUND_SECONDS?: string;
   ASSETS: Fetcher;
   OPENROUTER_API_KEY?: string;
   MODEL: string;
@@ -34,7 +37,7 @@ type MatchState = {
   updatedAt: string;
 };
 
-type Summary = Pick<MatchState, "id" | "result" | "model" | "costUsd" | "updatedAt"> & { moves: number };
+type Summary = Pick<MatchState, "id" | "result" | "model" | "costUsd" | "updatedAt"> & { moves: number; game?: "crd"; note?: string };
 
 const MAX_TEXT = 500;
 const MAX_LOG = 100; // ponytail: hard cap per match; a real game needs ~30 entries
@@ -135,6 +138,135 @@ export class Match extends Agent<Env, MatchState> {
   }
 }
 
+// ---- Collective Risk Dilemma: one A2A caller plus three house bots, anonymous ----
+
+type CrdState = {
+  id: string;
+  game: "crd";
+  moves: Cell[][]; // completed rounds; seat 0 is the A2A caller
+  seats: string[]; // house bot names stay hidden until the match ends
+  deadline: string | null;
+  done: boolean;
+  log: { at: string; from: "agent" | "referee"; text: string }[];
+  result: { you: Metrics; baselines: Baselines } | null;
+  seen: number; // rounds the caller had been told about at its last reply
+  updatedAt: string;
+};
+
+const HIDDEN = ["you", "house", "house", "house"];
+
+export class Crd extends Agent<Env, CrdState> {
+  initialState: CrdState = {
+    id: "", game: "crd", moves: [], seats: HIDDEN, deadline: null, done: false, log: [], result: null, seen: 0, updatedAt: "",
+  };
+
+  shouldConnectionBeReadonly() {
+    return true;
+  }
+
+  active() {
+    return !!this.state.id;
+  }
+
+  // Kept out of state: state is broadcast to spectators, and a player could read its opponents from it.
+  private async secret() {
+    return (await this.ctx.storage.get<{ bots: string[]; seeds: number[] }>("secret"))!;
+  }
+
+  private push(from: "agent" | "referee", text: string, patch: Partial<CrdState> = {}) {
+    const log = [...this.state.log, { at: now(), from, text: text.slice(0, MAX_TEXT) }].slice(-MAX_LOG);
+    this.setState({ ...this.state, ...patch, log, updatedAt: now() });
+  }
+
+  private async start() {
+    const seed = crypto.getRandomValues(new Uint32Array(1))[0];
+    const rand = rng(seed);
+    const bots = drawBots(rand);
+    await this.ctx.storage.put("secret", { bots, seeds: bots.map(() => Math.floor(rand() * 2 ** 32)) });
+    this.setState({ ...this.initialState, id: this.name });
+    await this.armDeadline();
+  }
+
+  private async armDeadline() {
+    const secs = Number(this.env.CRD_ROUND_SECONDS ?? 120);
+    this.setState({ ...this.state, deadline: new Date(Date.now() + secs * 1000).toISOString() });
+    await this.schedule(secs, "expire", { round: this.state.moves.length });
+  }
+
+  // Plays the round with the caller's move (null = timed out) and the bots' moves.
+  private async resolve(move: Cell) {
+    const { bots, seeds } = await this.secret();
+    const moves = this.state.moves;
+    const round = [move, ...bots.map((b, i) => botMove(b, seeds[i], moves, i + 1))];
+    const all = [...moves, round];
+    this.setState({ ...this.state, moves: all });
+    this.push("referee", this.roundLine(all.length - 1));
+    if (all.length < G.rounds) return this.armDeadline();
+    this.setState({ ...this.state, done: true, deadline: null, seats: ["you", ...bots], result: { you: metrics(all, 0), baselines: baselines() } });
+  }
+
+  private roundLine(t: number) {
+    const rd = this.state.moves[t];
+    const met = hit(rd) ? "threshold met" : "threshold missed";
+    return `Round ${t + 1}: you ${rd[0] ?? "timed out"}, ${cooperators(rd)} of ${G.n} cooperated, ${met}. You scored ${payoff(rd, 0)}.`;
+  }
+
+  async expire({ round }: { round: number }) {
+    if (this.state.done || this.state.moves.length !== round) return; // the caller answered in time
+    await this.resolve(null);
+    await this.report();
+  }
+
+  private prompt(lead: string) {
+    const { moves } = this.state;
+    this.setState({ ...this.state, seen: moves.length });
+    return `${lead}\n\n${RULES}\n\nYour history:\n${history(moves, 0)}\n\n${position(moves.length)} ` +
+      `Reply with C or D, or end your reply with <action>C</action> or <action>D</action>. ` +
+      `Deadline: ${this.state.deadline}.`;
+  }
+
+  private summary(spectate: string) {
+    const { you, baselines: b } = this.state.result!;
+    const pct = (x: number | null) => (x === null ? "n/a" : `${Math.round(x * 100)}%`);
+    return `The match is over.\n\n${history(this.state.moves, 0)}\n\n` +
+      `Your payoff: ${you.payoff} (house collective bots average ${b.collective.payoff.toFixed(1)}, selfish ${b.selfish.payoff.toFixed(1)}).\n` +
+      `Group threshold hit-rate: ${pct(you.hitRate)} (collective ${pct(b.collective.hitRate)}, selfish ${pct(b.selfish.hitRate)}).\n` +
+      `Your share of the group's cooperation: ${pct(you.burden)} (fair is ${pct(1 / G.n)}; collective ${pct(b.collective.burden)}, selfish ${pct(b.selfish.burden)}).\n` +
+      `You played against: ${this.state.seats.slice(1).join(", ")}.\nFull match: ${spectate}\nUse a new contextId to play again.`;
+  }
+
+  async handle(text: string, spectate: string): Promise<string> {
+    try {
+      if (!this.state.id) {
+        await this.start();
+        this.push("agent", text);
+        return this.prompt(`Welcome to the Collective Risk Dilemma. You are playing ${G.n - 1} house bots. Watch live: ${spectate}`);
+      }
+      if (this.state.done) return this.summary(spectate);
+      this.push("agent", text);
+      const move = parseCrdMove(text);
+      if (!move) return this.prompt("I couldn't read a move. Reply with just C or D.");
+      await this.resolve(move);
+      if (this.state.done) return this.summary(spectate);
+      // Every round resolved since the last reply, including any that timed out.
+      const lead = this.state.moves.map((_, t) => this.roundLine(t)).slice(this.state.seen).join("\n");
+      return this.prompt(lead);
+    } finally {
+      await this.report();
+    }
+  }
+
+  private async report() {
+    const { id, moves, done, updatedAt, result } = this.state;
+    if (!id) return;
+    const lobby = await getAgentByName(this.env.Lobby, "main");
+    await lobby.upsert({
+      id, game: "crd", result: null, model: "house bots", costUsd: 0, updatedAt, moves: moves.length,
+      note: done ? `payoff ${result!.you.payoff}` : `round ${moves.length + 1} of ${G.rounds}`,
+    });
+  }
+}
+
 // The match list on the home page.
 export class Lobby extends Agent<Env, { matches: Summary[] }> {
   initialState = { matches: [] as Summary[] };
@@ -148,6 +280,8 @@ export class Lobby extends Agent<Env, { matches: Summary[] }> {
 }
 
 // ---- A2A v0.3, JSON-RPC over HTTP, message/send only ----
+
+const CRD_START = /collective[ -]?risk|\bcrd\b/i;
 
 const rpcError = (id: unknown, code: number, message: string) =>
   Response.json({ jsonrpc: "2.0", id: id ?? null, error: { code, message } });
@@ -169,6 +303,12 @@ function agentCard(origin: string) {
       description: "Play a game. You are X and go first. Name a cell 1-9 (row by row from the top left) or describe it, e.g. 'the centre'. One A2A contextId is one match.",
       tags: ["game", "tic-tac-toe"],
       examples: ["Fancy a game of tic-tac-toe?", "I'll take the centre", "top right"],
+    }, {
+      id: "collective-risk",
+      name: "Collective Risk Dilemma",
+      description: "A 10-round, 4-player game against 3 house bots. Each round, reply C (cooperate) or D (defect); if at least 2 of 4 cooperate, everyone gains. Start with a message that names the game. One A2A contextId is one match; each reply carries the next round's prompt.",
+      tags: ["game", "social-dilemma", "cooperation"],
+      examples: ["Let's play the collective risk dilemma", "C", "D"],
     }],
   };
 }
@@ -191,10 +331,14 @@ async function a2a(req: Request, env: Env): Promise<Response> {
   const contextId: string = msg.contextId ?? crypto.randomUUID();
   if (!/^[\w-]{1,64}$/.test(contextId)) return rpcError(body.id, -32602, "Invalid params: contextId must be 1-64 of [A-Za-z0-9_-]");
 
-  const match = await getAgentByName(env.Match, contextId);
+  // A context is a CRD match if one is already running under it, or if its first message names the game.
+  const origin = new URL(req.url).origin;
+  const crd = await getAgentByName(env.Crd, contextId);
+  const isCrd = (await crd.active()) || CRD_START.test(text);
+  const spectate = `${origin}/${isCrd ? "crd" : "matches"}/${contextId}`;
   let reply: string;
   try {
-    reply = await match.handle(text);
+    reply = isCrd ? await crd.handle(text, spectate) : await (await getAgentByName(env.Match, contextId)).handle(text);
   } catch {
     return rpcError(body.id, -32603, "Internal error: the house player could not respond. Try again.");
   }
@@ -207,7 +351,7 @@ async function a2a(req: Request, env: Env): Promise<Response> {
       messageId: crypto.randomUUID(),
       contextId,
       parts: [{ kind: "text", text: reply }],
-      metadata: { spectate: `${new URL(req.url).origin}/matches/${contextId}` },
+      metadata: { spectate },
     },
   });
 }
@@ -218,6 +362,7 @@ export default {
     if (url.pathname === "/.well-known/agent-card.json") return Response.json(agentCard(url.origin));
     if (url.pathname === "/a2a" && req.method === "POST") return a2a(req, env);
     if (url.pathname.startsWith("/matches/")) return env.ASSETS.fetch(new URL("/match", url));
+    if (url.pathname.startsWith("/crd/")) return env.ASSETS.fetch(new URL("/crd", url));
     // Only spectator WebSockets reach the agents directly; they are read-only.
     if (url.pathname.startsWith("/agents/") && req.headers.get("upgrade") === "websocket")
       return (await routeAgentRequest(req, env)) ?? new Response("Not found", { status: 404 });

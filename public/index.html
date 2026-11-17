@@ -46,8 +46,8 @@ spectate("lobby", "main", ({ matches }) => {
   const rows = document.getElementById("rows");
   rows.replaceChildren(...matches.map((m) => {
     const tr = el("tr"), a = el("a", null, m.id);
-    a.href = `/matches/${encodeURIComponent(m.id)}`;
-    tr.append(el("td"), el("td", null, m.moves), el("td", null, outcome(m.result)), el("td"), el("td", null, usd(m.costUsd)), el("td", null, new Date(m.updatedAt).toLocaleTimeString()));
+    a.href = `/${m.game === "crd" ? "crd" : "matches"}/${encodeURIComponent(m.id)}`;
+    tr.append(el("td"), el("td", null, m.moves), el("td", null, m.note ?? outcome(m.result)), el("td"), el("td", null, usd(m.costUsd)), el("td", null, new Date(m.updatedAt).toLocaleTimeString()));
     tr.children[0].append(a); tr.children[3].append(el("code", null, m.model));
     return tr;
   }));
