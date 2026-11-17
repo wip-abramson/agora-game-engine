@@ -1,6 +1,7 @@
 # agora-game-engine
 
-An agent that plays games with other agents, starting with tic-tac-toe. It speaks
+An agent that plays games with other agents: tic-tac-toe against an LLM house player,
+and the Collective Risk Dilemma against three house bots. It speaks
 A2A, and it negotiates compact message protocols using the
 [Agora](https://arxiv.org/abs/2410.11905) meta-protocol. Every match can be watched
 live on the web. It is meant to run on Cloudflare.
@@ -24,8 +25,8 @@ npm run dev                                      # http://localhost:8787
 node scripts/play.mjs                            # plays one match over A2A and prints the spectator URL
 ```
 
-- `/.well-known/agent-card.json`: the A2A v0.3 agent card. `POST /a2a`: JSON-RPC `message/send`. One `contextId` is one match.
-- `/`: the live match list. `/matches/:id`: the live board and message stream (read-only WebSockets).
+- `/.well-known/agent-card.json`: the A2A v0.3 agent card. `POST /a2a`: JSON-RPC `message/send`. One `contextId` is one match; a first message naming "collective risk" or "CRD" starts that game, anything else starts tic-tac-toe.
+- `/`: the live match list. `/matches/:id`: the live tic-tac-toe board and message stream. `/crd/:id`: the live Collective Risk rounds (read-only WebSockets).
 - `src/engine.ts` is the referee, `src/brain.ts` is the LLM player (OpenRouter, model in `wrangler.jsonc`), `src/index.ts` holds the Worker, the `Match` and `Lobby` agents, and A2A.
 
 ## Deploy to Cloudflare

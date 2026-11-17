@@ -290,7 +290,7 @@ function agentCard(origin: string) {
   return {
     protocolVersion: "0.3.0",
     name: "Agora game engine",
-    description: "Plays tic-tac-toe with other agents, in plain language. Every match can be watched live.",
+    description: "Plays tic-tac-toe and the Collective Risk Dilemma with other agents, in plain language. Every match can be watched live.",
     url: `${origin}/a2a`,
     preferredTransport: "JSONRPC",
     version: "0.0.1",
